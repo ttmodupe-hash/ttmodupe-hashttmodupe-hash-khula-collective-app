@@ -3,8 +3,12 @@
 # Core Framework
 streamlit==1.31.0
 
-# Database & Auth
+# Database & ORM
+sqlalchemy==2.0.25
+
+# Authentication & Security
 bcrypt==4.1.2
+cryptography==42.0.2
 
 # Data Processing
 pandas==2.2.0

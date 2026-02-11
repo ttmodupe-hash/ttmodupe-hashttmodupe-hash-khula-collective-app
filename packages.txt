@@ -1,2 +1,6 @@
 build-essential
 libffi-dev
+python3-dev
+gcc
+g++
+make

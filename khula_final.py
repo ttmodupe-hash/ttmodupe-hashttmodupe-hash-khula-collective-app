@@ -323,7 +323,7 @@ def sync_from_stitch_api():
 # ============================================================================
 
 def suggest_investments(current_balance, risk_level='Medium'):
-    """AI-powered investment suggestions"""
+    """Enhanced AI-powered investment suggestions with specific opportunities"""
     suggestions = {
         'current_balance': current_balance,
         'risk_level': risk_level,
@@ -331,48 +331,298 @@ def suggest_investments(current_balance, risk_level='Medium'):
         'summary': ''
     }
     
-    if current_balance >= 50000:
-        suggestions['recommendations'].append({
-            'investment': 'RSA Retail Top-Up Bonds',
-            'amount': 50000,
-            'expected_return': 7.75,
-            'reason': '🎯 MILESTONE: Protect R50k against inflation at 7.75% return'
-        })
+    # Calculate potential returns
+    def calc_return(amount, rate, years=1):
+        return amount * (rate / 100) * years
+    
+    if current_balance >= 100000:
+        # Diversified portfolio for R100k+
+        suggestions['recommendations'] = [
+            {
+                'investment': 'RSA Retail Savings Bonds (2-year)',
+                'amount': 50000,
+                'expected_return': 8.25,
+                'annual_income': calc_return(50000, 8.25),
+                'risk': 'Very Low',
+                'reason': '🏦 Government-backed, inflation-beating returns'
+            },
+            {
+                'investment': 'Satrix MSCI World ETF (USD exposure)',
+                'amount': 30000,
+                'expected_return': 10.5,
+                'annual_income': calc_return(30000, 10.5),
+                'risk': 'Medium',
+                'reason': '🌍 Global diversification, rand hedge'
+            },
+            {
+                'investment': 'Satrix Property ETF',
+                'amount': 15000,
+                'expected_return': 9.0,
+                'annual_income': calc_return(15000, 9.0),
+                'risk': 'Medium',
+                'reason': '🏢 Property exposure, dividend income'
+            },
+            {
+                'investment': 'Emergency Fund (FNB)',
+                'amount': current_balance - 95000,
+                'expected_return': 5.5,
+                'annual_income': calc_return(current_balance - 95000, 5.5),
+                'risk': 'Very Low',
+                'reason': '💰 Liquidity for opportunities'
+            }
+        ]
+        
+        total_expected = sum([r['annual_income'] for r in suggestions['recommendations']])
+        
+        suggestions['summary'] = f"""
+**🎉 EXCELLENT PROGRESS: R{current_balance:,.2f}**
+
+**Recommended Diversified Portfolio:**
+
+Your balance allows for a well-diversified investment strategy:
+
+**Total Expected Annual Return: R{total_expected:,.2f} ({(total_expected/current_balance)*100:.1f}%)**
+
+**Investment Breakdown:**
+"""
+        for rec in suggestions['recommendations']:
+            suggestions['summary'] += f"\n• **{rec['investment']}**: R{rec['amount']:,.0f} @ {rec['expected_return']}% = R{rec['annual_income']:,.0f}/year\n  {rec['reason']}"
+        
+        suggestions['summary'] += f"""
+
+**Next Steps:**
+1. Open EasyEquities account (free, online)
+2. Open RSA Retail Bonds account at Post Office
+3. Schedule investment meeting
+4. Vote on portfolio allocation (60% approval)
+5. Execute investments over 2-3 months (rand-cost averaging)
+
+**Risk Profile:** Balanced (60% low-risk, 40% growth)
+        """
+        
+    elif current_balance >= 50000:
+        # R50k-R100k: Foundation building
+        suggestions['recommendations'] = [
+            {
+                'investment': 'RSA Retail Savings Bonds (2-year)',
+                'amount': 50000,
+                'expected_return': 8.25,
+                'annual_income': calc_return(50000, 8.25),
+                'risk': 'Very Low',
+                'reason': '🎯 MILESTONE: Lock in R50k at 8.25% government-backed rate'
+            },
+            {
+                'investment': 'Satrix Top 40 ETF',
+                'amount': min(20000, current_balance - 50000),
+                'expected_return': 11.0,
+                'annual_income': calc_return(min(20000, current_balance - 50000), 11.0),
+                'risk': 'Medium',
+                'reason': '📈 JSE exposure, long-term growth'
+            },
+            {
+                'investment': 'Emergency Reserve (FNB)',
+                'amount': max(0, current_balance - 70000),
+                'expected_return': 5.5,
+                'annual_income': calc_return(max(0, current_balance - 70000), 5.5),
+                'risk': 'Very Low',
+                'reason': '💰 Maintain liquidity'
+            }
+        ]
+        
+        total_expected = sum([r['annual_income'] for r in suggestions['recommendations']])
         
         suggestions['summary'] = f"""
 **🎉 MILESTONE REACHED: R50,000+**
 
-Based on our current balance of **R{current_balance:,.2f}**, the Khula AI suggests:
+**Current Balance: R{current_balance:,.2f}**
 
-**Primary Recommendation:**
-Move **R50,000** into an RSA Retail Top-Up Bond at **7.75% interest** to protect our capital against inflation.
+**Recommended Strategy:**
 
-**Expected Annual Return:** R3,875
+**Total Expected Annual Return: R{total_expected:,.2f} ({(total_expected/current_balance)*100:.1f}%)**
 
-The remaining liquidity (R{current_balance - 50000:,.2f}) should stay in the FNB account for upcoming investment opportunities.
+**Investment Breakdown:**
+"""
+        for rec in suggestions['recommendations']:
+            if rec['amount'] > 0:
+                suggestions['summary'] += f"\n• **{rec['investment']}**: R{rec['amount']:,.0f} @ {rec['expected_return']}% = R{rec['annual_income']:,.0f}/year\n  {rec['reason']}"
+        
+        suggestions['summary'] += f"""
 
-**Action Required:**
-1. Schedule group meeting to discuss
+**How to Invest:**
+
+**RSA Retail Bonds:**
+1. Visit any Post Office with ID
+2. Complete application form
+3. Minimum: R1,000, Maximum: R5 million
+4. Interest paid monthly or at maturity
+5. Website: www.rsaretailbonds.gov.za
+
+**Satrix ETFs (via EasyEquities):**
+1. Sign up: www.easyequities.co.za
+2. FICA verification (2-3 days)
+3. Fund account via EFT
+4. Buy ETF units (minimum R100)
+5. No monthly fees, low transaction costs
+
+**Action Plan:**
+1. Group meeting to discuss (this week)
 2. Vote on investment (60% approval needed)
-3. Execute investment strategy
+3. Open accounts (1-2 weeks)
+4. Execute investments (month-end)
+
+**Risk Profile:** Conservative (70% low-risk, 30% growth)
         """
+        
+    elif current_balance >= 30000:
+        # R30k-R50k: Building towards milestone
+        suggestions['recommendations'] = [
+            {
+                'investment': 'FNB Money Market Account',
+                'amount': 20000,
+                'expected_return': 7.5,
+                'annual_income': calc_return(20000, 7.5),
+                'risk': 'Very Low',
+                'reason': '🏦 Higher interest than savings, instant access'
+            },
+            {
+                'investment': 'Satrix Top 40 ETF (starter)',
+                'amount': 10000,
+                'expected_return': 11.0,
+                'annual_income': calc_return(10000, 11.0),
+                'risk': 'Medium',
+                'reason': '📈 Start building equity exposure'
+            },
+            {
+                'investment': 'FNB Savings (liquidity)',
+                'amount': current_balance - 30000,
+                'expected_return': 5.5,
+                'annual_income': calc_return(current_balance - 30000, 5.5),
+                'risk': 'Very Low',
+                'reason': '💰 Emergency fund'
+            }
+        ]
+        
+        total_expected = sum([r['annual_income'] for r in suggestions['recommendations']])
+        
+        suggestions['summary'] = f"""
+**💪 STRONG PROGRESS: R{current_balance:,.2f}**
+
+**Strategy: Preparing for R50k Milestone**
+
+**Total Expected Annual Return: R{total_expected:,.2f} ({(total_expected/current_balance)*100:.1f}%)**
+
+**Recommended Allocation:**
+"""
+        for rec in suggestions['recommendations']:
+            if rec['amount'] > 0:
+                suggestions['summary'] += f"\n• **{rec['investment']}**: R{rec['amount']:,.0f} @ {rec['expected_return']}% = R{rec['annual_income']:,.0f}/year\n  {rec['reason']}"
+        
+        suggestions['summary'] += f"""
+
+**Remaining to R50k Milestone:** R{50000 - current_balance:,.2f}
+
+**Quick Wins:**
+1. Open FNB Money Market (higher interest than savings)
+2. Start small ETF investment via EasyEquities
+3. Continue R300/month contributions
+4. Reach R50k in ~{int((50000 - current_balance) / (300 * 20))} months
+
+**Next Meeting Agenda:**
+- Review investment options
+- Vote on Money Market transfer
+- Discuss ETF starter investment
+        """
+        
     elif current_balance >= 10000:
+        # R10k-R30k: Foundation phase
+        suggestions['recommendations'] = [
+            {
+                'investment': 'FNB Money Market Account',
+                'amount': 10000,
+                'expected_return': 7.5,
+                'annual_income': calc_return(10000, 7.5),
+                'risk': 'Very Low',
+                'reason': '🏦 Better returns than regular savings'
+            },
+            {
+                'investment': 'FNB Savings (building fund)',
+                'amount': current_balance - 10000,
+                'expected_return': 5.5,
+                'annual_income': calc_return(current_balance - 10000, 5.5),
+                'risk': 'Very Low',
+                'reason': '💰 Continue building towards R50k'
+            }
+        ]
+        
+        total_expected = sum([r['annual_income'] for r in suggestions['recommendations']])
+        months_to_50k = int((50000 - current_balance) / (300 * 20))
+        
         suggestions['summary'] = f"""
-**Current Balance: R{current_balance:,.2f}**
+**📊 FOUNDATION BUILDING: R{current_balance:,.2f}**
 
-**Strategy: Building Towards R50k Milestone**
+**Current Strategy: Maximize Returns While Building**
 
-Continue consistent R300/month contributions. Once we reach R50,000, we'll invest in RSA Retail Bonds at 7.75% return.
+**Total Expected Annual Return: R{total_expected:,.2f} ({(total_expected/current_balance)*100:.1f}%)**
 
-**Remaining to Milestone:** R{50000 - current_balance:,.2f}
+**Recommended Actions:**
+
+• **Transfer R10,000 to FNB Money Market**
+  - Earn 7.5% vs 5.5% in savings
+  - Extra R{calc_return(10000, 7.5) - calc_return(10000, 5.5):.0f}/year
+  - Still instant access
+
+• **Keep R{current_balance - 10000:,.0f} in FNB Savings**
+  - Building towards R50k milestone
+  - Maintain liquidity
+
+**Path to R50k:**
+- Current: R{current_balance:,.2f}
+- Remaining: R{50000 - current_balance:,.2f}
+- Timeline: ~{months_to_50k} months at R300/member
+- Target: {(datetime.now() + timedelta(days=months_to_50k*30)).strftime('%B %Y')}
+
+**Immediate Actions:**
+1. Open FNB Money Market (free, online)
+2. Transfer R10,000 for better returns
+3. Continue consistent contributions
+4. Review progress monthly
+
+**Why This Matters:**
+Moving R10k to Money Market adds R{calc_return(10000, 7.5) - calc_return(10000, 5.5):.0f}/year extra income!
         """
+        
     else:
+        # Under R10k: Focus on building
+        months_to_10k = max(1, int((10000 - current_balance) / (300 * 20)))
+        
         suggestions['summary'] = f"""
-**Current Balance: R{current_balance:,.2f}**
+**🌱 BUILDING FOUNDATION: R{current_balance:,.2f}**
 
-**Strategy: Build Foundation**
+**Current Focus: Reach R10,000 Milestone**
 
-Focus on consistent contributions to reach our first milestone of R10,000.
+**Progress:** {(current_balance/10000)*100:.1f}% to first milestone
+
+**Strategy:**
+1. **Maintain R300/month contributions** from all 20 members
+2. **Target R10k in ~{months_to_10k} months** ({(datetime.now() + timedelta(days=months_to_10k*30)).strftime('%B %Y')})
+3. **Then unlock better investment options**
+
+**What Happens at R10k:**
+- Open FNB Money Market (7.5% vs 5.5%)
+- Extra R{calc_return(10000, 7.5) - calc_return(10000, 5.5):.0f}/year income
+- Start building towards R50k milestone
+
+**What Happens at R50k:**
+- RSA Retail Bonds at 8.25%
+- R{calc_return(50000, 8.25):,.0f}/year guaranteed income
+- Start ETF investments
+- Real wealth building begins
+
+**Keep Contributing!**
+Every R300 brings us closer to unlocking better returns.
+
+**Current Monthly Inflow:** R{300 * 20:,.0f}
+**Remaining to R10k:** R{max(0, 10000 - current_balance):,.2f}
         """
     
     return suggestions

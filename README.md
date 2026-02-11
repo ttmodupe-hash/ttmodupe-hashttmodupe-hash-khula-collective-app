@@ -2,6 +2,12 @@
 
 A comprehensive FICA-compliant investment club tracker for 20 members, built with Streamlit and Python.
 
+## 🚀 Quick Deploy
+
+[![Deploy to Streamlit Cloud](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=ttmodupe-hash/ttmodupe-hashttmodupe-hash-khula-collective-app&branch=main&mainModule=khula_final.py)
+
+**One-click deployment** - Click the button above to deploy instantly to Streamlit Cloud!
+
 ## 🌟 Features
 
 ### Core Functionality

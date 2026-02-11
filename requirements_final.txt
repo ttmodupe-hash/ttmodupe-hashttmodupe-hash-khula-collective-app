@@ -1,0 +1,22 @@
+# Khula Collective - Final Production Requirements
+
+# Core Framework
+streamlit==1.31.0
+
+# Database & Auth
+bcrypt==4.1.2
+
+# Data Processing
+pandas==2.2.0
+
+# Visualization
+plotly==5.18.0
+
+# API Integration
+requests==2.31.0
+
+# WhatsApp Notifications
+twilio==8.11.0
+
+# Environment Management
+python-dotenv==1.0.0

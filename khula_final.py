@@ -6,7 +6,7 @@ Complete Investment Club Tracker for 20 Members
 import streamlit as st
 import pandas as pd
 import sqlite3
-import bcrypt
+import hashlib
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, timedelta
@@ -455,8 +455,8 @@ def create_user(username, first_name, surname, id_number, rica_number, email, pa
     # Extract info from ID
     id_info = extract_info_from_id(id_number)
     
-    # Hash password
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    # Hash password using SHA-256 (no compilation needed)
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -494,7 +494,7 @@ def authenticate_user(username, password):
     user = cursor.fetchone()
     conn.close()
     
-    if user and bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
+    if user and hashlib.sha256(password.encode()).hexdigest() == user['password_hash']:
         return dict(user)
     return None
 

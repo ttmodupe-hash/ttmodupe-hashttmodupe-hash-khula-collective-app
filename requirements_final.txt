@@ -7,7 +7,7 @@ streamlit==1.31.0
 sqlalchemy==2.0.25
 
 # Authentication & Security
-bcrypt==4.0.1
+# Using hashlib (built-in) instead of bcrypt for better compatibility
 cryptography==41.0.7
 
 # Data Processing

@@ -224,14 +224,34 @@ st.markdown("""
 
 
 # ============================================================
-# DATABASE FUNCTIONS
+# REVIEW MODE &amp; DATABASE FUNCTIONS
 # ============================================================
+
+# Import mock data generator
+try:
+    from seed_data import (
+        generate_mock_contributions,
+        calculate_mock_balance,
+        get_mock_member_stats,
+        get_mock_leaderboard,
+        get_mock_monthly_totals,
+        get_mock_investment_opportunities,
+        get_mock_market_data,
+        get_mock_member_votes
+    )
+    MOCK_DATA_AVAILABLE = True
+except ImportError:
+    MOCK_DATA_AVAILABLE = False
 
 def get_db():
     db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'khula_collective.db')
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
+
+def is_review_mode():
+    """Check if Review Mode is enabled"""
+    return st.session_state.get('review_mode', False)
 
 def initialize_votes_table():
     """Create Votes table if it doesn't exist"""
@@ -265,6 +285,11 @@ def authenticate(username, password):
     return None
 
 def get_total_balance():
+    # Review Mode: Use mock data
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        return float(calculate_mock_balance())
+    
+    # Live Mode: Use real database
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT COALESCE(SUM(amount), 0) as total FROM Monthly_Contributions WHERE status = 'Paid'")
@@ -285,6 +310,11 @@ def get_all_members():
     return members
 
 def get_monthly_totals():
+    # Review Mode: Use mock data
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        return get_mock_monthly_totals()
+    
+    # Live Mode: Use real database
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -301,6 +331,12 @@ def get_monthly_totals():
     return data
 
 def get_member_contributions(user_id):
+    # Review Mode: Use mock data
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        all_contribs = generate_mock_contributions()
+        return [c for c in all_contribs if c['user_id'] == user_id and c['status'] == 'Received']
+    
+    # Live Mode: Use real database
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -328,6 +364,11 @@ def save_constitution_signature(user_id, full_name):
 
 def get_votes():
     """Get all investment suggestions with vote counts and details"""
+    # Review Mode: Use mock data
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        return get_mock_investment_opportunities()
+    
+    # Live Mode: Use real database
     conn = get_db()
     cursor = conn.cursor()
     
@@ -360,6 +401,12 @@ def get_votes():
 
 def user_has_voted(user_id, suggestion_id):
     """Check if user has already voted for this suggestion"""
+    # Review Mode: Use mock data
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        votes = get_mock_member_votes(user_id)
+        return any(v['suggestion_id'] == suggestion_id for v in votes)
+    
+    # Live Mode: Use real database
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -372,6 +419,11 @@ def user_has_voted(user_id, suggestion_id):
 
 def cast_vote(user_id, suggestion_id):
     """Cast a vote for a suggestion (one vote per user per suggestion)"""
+    # Review Mode: Show success message but don't save
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        return True  # Simulate successful vote in review mode
+    
+    # Live Mode: Save to database
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -389,6 +441,11 @@ def cast_vote(user_id, suggestion_id):
 
 def add_investment_suggestion(text, user_id):
     """Add a new investment suggestion"""
+    # Review Mode: Don't save to database
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        return 999  # Return dummy ID
+    
+    # Live Mode: Save to database
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -685,6 +742,30 @@ def show_dashboard():
         </div>
         """, unsafe_allow_html=True)
         
+        # Review Mode Toggle (Admin Only)
+        if user['is_admin'] == 1:
+            st.markdown("---")
+            st.markdown("### 🔍 Review Mode")
+            
+            # Initialize review_mode in session state if not exists
+            if 'review_mode' not in st.session_state:
+                st.session_state.review_mode = False
+            
+            review_mode = st.toggle(
+                "Enable Review Mode",
+                value=st.session_state.review_mode,
+                help="Use mock data for testing. Real bank credentials stay hidden.",
+                key="review_mode_toggle"
+            )
+            
+            # Update session state
+            st.session_state.review_mode = review_mode
+            
+            if review_mode:
+                st.info("📊 Using mock data for testing")
+            else:
+                st.success("🔴 Using live bank data")
+        
         if st.button("🚪 Logout", use_container_width=True):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
@@ -729,6 +810,28 @@ def show_dashboard():
                            unsafe_allow_html=True)
     
     # Main Content
+    
+    # Review Mode Banner
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #fdcb6e, #e17055); 
+                    border-radius: 12px; padding: 15px 20px; margin-bottom: 20px;
+                    border: 2px solid rgba(255,255,255,0.2);
+                    box-shadow: 0 10px 30px rgba(253, 203, 110, 0.3);">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="font-size: 32px;">🔍</div>
+                <div>
+                    <div style="color: #2d3436; font-weight: 700; font-size: 16px; margin-bottom: 3px;">
+                        REVIEW MODE ACTIVE
+                    </div>
+                    <div style="color: #2d3436; font-size: 13px; opacity: 0.8;">
+                        Using mock data for testing. Real bank credentials are hidden. Members can safely test login, FICA registration, and voting features.
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
     total_balance = get_total_balance()
     monthly_totals = get_monthly_totals()
     members = get_all_members()

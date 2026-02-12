@@ -271,6 +271,25 @@ def initialize_votes_table():
     conn.commit()
     conn.close()
 
+def initialize_reviews_table():
+    """Create member_reviews table if it doesn't exist"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS member_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            username TEXT,
+            full_name TEXT,
+            rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+            comment TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES Users(user_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -438,6 +457,76 @@ def cast_vote(user_id, suggestion_id):
         success = False
     conn.close()
     return success
+
+def submit_review(user_id, username, full_name, rating, comment):
+    """Submit member review/feedback"""
+    # Review Mode: Save to session state for demo
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        if 'mock_reviews' not in st.session_state:
+            st.session_state.mock_reviews = []
+        st.session_state.mock_reviews.append({
+            'user_id': user_id,
+            'username': username,
+            'full_name': full_name,
+            'rating': rating,
+            'comment': comment,
+            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        return True
+    
+    # Live Mode: Save to database
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO member_reviews (user_id, username, full_name, rating, comment, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, username, full_name, rating, comment, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        conn.commit()
+        success = True
+    except Exception as e:
+        print(f"Error submitting review: {e}")
+        success = False
+    finally:
+        conn.close()
+    return success
+
+def get_all_reviews():
+    """Get all member reviews (admin only)"""
+    # Review Mode: Return mock reviews
+    if is_review_mode() and MOCK_DATA_AVAILABLE:
+        mock_reviews = st.session_state.get('mock_reviews', [])
+        # Add some sample reviews if empty
+        if not mock_reviews:
+            return [
+                {'user_id': 2, 'username': 'thabo_mthembu', 'full_name': 'Thabo Mthembu', 
+                 'rating': 5, 'comment': 'Love the app! Very easy to use and track our savings.', 
+                 'created_at': '2026-02-10 14:30:00'},
+                {'user_id': 3, 'username': 'nomsa_dlamini', 'full_name': 'Nomsa Dlamini', 
+                 'rating': 4, 'comment': 'Great platform. Would like to see more investment options.', 
+                 'created_at': '2026-02-10 15:45:00'},
+                {'user_id': 4, 'username': 'sipho_khumalo', 'full_name': 'Sipho Khumalo', 
+                 'rating': 5, 'comment': 'The voting system is perfect! Makes us feel involved.', 
+                 'created_at': '2026-02-11 09:20:00'},
+            ]
+        return mock_reviews
+    
+    # Live Mode: Query database
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT user_id, username, full_name, rating, comment, created_at
+            FROM member_reviews
+            ORDER BY created_at DESC
+        """)
+        reviews = [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error fetching reviews: {e}")
+        reviews = []
+    finally:
+        conn.close()
+    return reviews
 
 def add_investment_suggestion(text, user_id):
     """Add a new investment suggestion"""
@@ -720,8 +809,9 @@ def show_login():
 # ============================================================
 
 def show_dashboard():
-    # Initialize votes table
+    # Initialize tables
     initialize_votes_table()
+    initialize_reviews_table()
     
     user = st.session_state['user']
     full_name = f"{user['first_name']} {user['surname']}"
@@ -811,7 +901,7 @@ def show_dashboard():
     
     # Main Content
     
-    # Review Mode Banner
+    # Beta Review Mode Banner
     if is_review_mode() and MOCK_DATA_AVAILABLE:
         st.markdown("""
         <div style="background: linear-gradient(135deg, #fdcb6e, #e17055); 
@@ -819,13 +909,13 @@ def show_dashboard():
                     border: 2px solid rgba(255,255,255,0.2);
                     box-shadow: 0 10px 30px rgba(253, 203, 110, 0.3);">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <div style="font-size: 32px;">🔍</div>
+                <div style="font-size: 32px;">🧪</div>
                 <div>
                     <div style="color: #2d3436; font-weight: 700; font-size: 16px; margin-bottom: 3px;">
-                        REVIEW MODE ACTIVE
+                        🇿🇦 BETA REVIEW MODE - Test Data Active
                     </div>
                     <div style="color: #2d3436; font-size: 13px; opacity: 0.8;">
-                        Using mock data for testing. Real bank credentials are hidden. Members can safely test login, FICA registration, and voting features.
+                        You're viewing Jan 2025 – Feb 2026 test data. Explore the app and share your feedback in the ⭐ Member Reviews tab!
                     </div>
                 </div>
             </div>
@@ -862,7 +952,10 @@ def show_dashboard():
         </div>""", unsafe_allow_html=True)
     
     # Tabs
-    tabs = st.tabs(["📊 Dashboard", "🗳️ Member Voice", "💡 AI Advisor", "👤 Profile"])
+    if is_admin:
+        tabs = st.tabs(["📊 Dashboard", "🗳️ Member Voice", "💡 AI Advisor", "⭐ Member Reviews", "👤 Profile", "🔧 Admin Panel"])
+    else:
+        tabs = st.tabs(["📊 Dashboard", "🗳️ Member Voice", "💡 AI Advisor", "⭐ Member Reviews", "👤 Profile"])
     
     # TAB 1: DASHBOARD
     with tabs[0]:
@@ -1181,6 +1274,183 @@ def show_dashboard():
                                 st.markdown(f"<div style='text-align:center;background:#3a1a1a;border:1px solid #e74c3c;border-radius:8px;padding:8px;margin:2px;'><div style='color:#e74c3c;font-size:10px;'>{month_names[i]}</div><div style='color:#e74c3c;font-size:16px;'>❌</div></div>", unsafe_allow_html=True)
         else:
             st.info("No contributions yet")
+    
+    # TAB 5: MEMBER REVIEWS (Feedback Form)
+    tab_index = 3 if not is_admin else 3
+    with tabs[tab_index]:
+        st.markdown('<div class="section-header">⭐ Member Reviews</div>', unsafe_allow_html=True)
+        
+        # Beta Review Notice
+        if is_review_mode():
+            st.info("🧪 **Beta Review Mode**: Your feedback helps us improve before launch!")
+        
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #1e1e30, #2a2a40); 
+                    border-radius: 16px; padding: 20px; margin-bottom: 20px;
+                    border: 1px solid rgba(255,255,255,0.08);">
+            <h3 style="color: #00b894; margin-bottom: 10px;">📝 Share Your Feedback</h3>
+            <p style="color: rgba(255,255,255,0.7); font-size: 14px;">
+                Help us build the best investment platform for our collective! 
+                Rate your experience and share suggestions for improvement.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Feedback Form
+        with st.form("member_review_form", clear_on_submit=True):
+            st.markdown("### How would you rate your experience?")
+            
+            # Star rating using feedback widget
+            rating = st.feedback("stars")
+            
+            st.markdown("### Your Suggestions/Review")
+            comment = st.text_area(
+                "Tell us what you think",
+                placeholder="What do you like? What could be better? Any features you'd like to see?",
+                height=150,
+                help="Your honest feedback helps us improve the platform for everyone!"
+            )
+            
+            # Submit button
+            submitted = st.form_submit_button("✅ Submit Review", use_container_width=True)
+            
+            if submitted:
+                if rating is None:
+                    st.error("⚠️ Please provide a star rating")
+                elif not comment or len(comment.strip()) < 10:
+                    st.error("⚠️ Please write at least 10 characters in your review")
+                else:
+                    # Convert rating (0-4) to stars (1-5)
+                    star_rating = rating + 1
+                    
+                    success = submit_review(
+                        user['user_id'],
+                        user['username'],
+                        full_name,
+                        star_rating,
+                        comment.strip()
+                    )
+                    
+                    if success:
+                        st.success("🎉 Thank you for your feedback! Your review has been submitted.")
+                        st.balloons()
+                    else:
+                        st.error("❌ Failed to submit review. Please try again.")
+        
+        # Show user's previous reviews
+        st.markdown("---")
+        st.markdown("### 📋 Your Previous Reviews")
+        
+        all_reviews = get_all_reviews()
+        user_reviews = [r for r in all_reviews if r['user_id'] == user['user_id']]
+        
+        if user_reviews:
+            for review in user_reviews:
+                stars = "⭐" * review['rating']
+                st.markdown(f"""
+                <div style="background: rgba(255,255,255,0.03); border-radius: 12px; 
+                            padding: 15px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="color: #fdcb6e; font-size: 18px; margin-bottom: 5px;">{stars}</div>
+                    <div style="color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px;">
+                        {review['comment']}
+                    </div>
+                    <div style="color: rgba(255,255,255,0.4); font-size: 12px;">
+                        Submitted: {review['created_at']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("You haven't submitted any reviews yet. Share your thoughts above!")
+    
+    # TAB 6: ADMIN PANEL (Admin Only)
+    if is_admin:
+        with tabs[5]:
+            st.markdown('<div class="section-header">🔧 Admin Panel</div>', unsafe_allow_html=True)
+            
+            # Review Log Section
+            st.markdown("### 📊 Member Review Log")
+            
+            all_reviews = get_all_reviews()
+            
+            if all_reviews:
+                # Summary metrics
+                total_reviews = len(all_reviews)
+                avg_rating = sum(r['rating'] for r in all_reviews) / total_reviews if total_reviews > 0 else 0
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Reviews", total_reviews)
+                with col2:
+                    st.metric("Average Rating", f"{avg_rating:.1f} ⭐")
+                with col3:
+                    rating_5 = len([r for r in all_reviews if r['rating'] == 5])
+                    st.metric("5-Star Reviews", f"{rating_5} ({rating_5/total_reviews*100:.0f}%)")
+                
+                st.markdown("---")
+                
+                # Reviews table
+                st.markdown("### 📋 All Reviews")
+                
+                # Convert to DataFrame for display
+                import pandas as pd
+                df_reviews = pd.DataFrame(all_reviews)
+                
+                # Format for display
+                df_display = df_reviews[['full_name', 'rating', 'comment', 'created_at']].copy()
+                df_display.columns = ['Member', 'Rating', 'Review', 'Date']
+                df_display['Rating'] = df_display['Rating'].apply(lambda x: "⭐" * x)
+                
+                st.dataframe(
+                    df_display,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Download as CSV
+                st.markdown("### 💾 Export Reviews")
+                
+                csv = df_reviews.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Reviews as CSV",
+                    data=csv,
+                    file_name=f"khula_reviews_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                # Individual review cards
+                st.markdown("---")
+                st.markdown("### 💬 Detailed Reviews")
+                
+                for review in all_reviews:
+                    stars = "⭐" * review['rating']
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #1e1e30, #2a2a40); 
+                                border-radius: 16px; padding: 20px; margin-bottom: 15px;
+                                border: 1px solid rgba(255,255,255,0.08);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div>
+                                <div style="color: #00b894; font-weight: 600; font-size: 16px;">
+                                    {review['full_name']}
+                                </div>
+                                <div style="color: rgba(255,255,255,0.5); font-size: 12px;">
+                                    @{review['username']}
+                                </div>
+                            </div>
+                            <div style="color: #fdcb6e; font-size: 20px;">
+                                {stars}
+                            </div>
+                        </div>
+                        <div style="color: rgba(255,255,255,0.8); font-size: 14px; line-height: 1.6; margin-bottom: 10px;">
+                            "{review['comment']}"
+                        </div>
+                        <div style="color: rgba(255,255,255,0.4); font-size: 12px;">
+                            📅 {review['created_at']}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No reviews submitted yet. Members can share feedback in the Member Reviews tab.")
 
 
 # ============================================================
@@ -1188,10 +1458,23 @@ def show_dashboard():
 # ============================================================
 
 def main():
-    if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
-        show_login()
-    else:
-        show_dashboard()
+    try:
+        if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+            show_login()
+        else:
+            show_dashboard()
+    except Exception as e:
+        st.error("""
+        🛠️ **Khula Collective is updating.**
+        
+        Please refresh the page in 60 seconds.
+        
+        If the issue persists, contact your admin.
+        """)
+        
+        # Log error for debugging (only in development)
+        if st.secrets.get("app", {}).get("debug", False):
+            st.exception(e)
 
 if __name__ == "__main__":
     main()

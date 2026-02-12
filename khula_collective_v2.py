@@ -14,7 +14,7 @@ st.set_page_config(
     page_title="Khula Collective 💰",
     page_icon="💰",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ============================================================
@@ -210,6 +210,38 @@ st.markdown("""
         background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 100%);
         border-right: 1px solid rgba(255,255,255,0.06);
     }
+    
+    /* Constitution viewer - Mobile friendly */
+    .constitution-box {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 15px;
+        margin: 10px 0;
+        max-height: 400px;
+        overflow-y: auto;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255,255,255,0.8);
+    }
+    
+    /* Signature box */
+    .signature-box {
+        background: linear-gradient(135deg, #1e1e30, #2a2a40);
+        border: 2px solid #00b894;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 15px 0;
+    }
+    
+    /* Mobile containers */
+    @media (max-width: 768px) {
+        .constitution-box {
+            font-size: 12px;
+            padding: 12px;
+            max-height: 300px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -358,6 +390,83 @@ def get_member_contributions(user_id):
 
 
 # ============================================================
+# CONSTITUTION &amp; SIGNATURE FUNCTIONS
+# ============================================================
+
+def save_constitution_signature(user_id, full_name):
+    """Save digital signature for FICA compliance"""
+    conn = get_db()
+    cursor = conn.cursor()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    cursor.execute("""
+        UPDATE Users 
+        SET constitution_signed = 1, 
+            constitution_signed_date = ?
+        WHERE user_id = ?
+    """, (timestamp, user_id))
+    conn.commit()
+    conn.close()
+    return timestamp
+
+def get_member_signatures():
+    """Get all member signatures for FICA compliance log"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            first_name || ' ' || surname as full_name,
+            id_number,
+            constitution_signed_date,
+            constitution_signed
+        FROM Users
+        WHERE is_admin = 0
+        ORDER BY constitution_signed_date DESC
+    """)
+    data = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return data
+
+CONSTITUTION_TEXT = """
+# KHULA COLLECTIVE CONSTITUTION
+
+## 1. NAME AND PURPOSE
+This collective shall be known as "Khula Collective" (meaning "to grow" in isiZulu). 
+Our purpose is to pool resources for collective investment and wealth creation.
+
+## 2. MEMBERSHIP
+- Membership is open to all South African citizens over 18 years of age
+- Each member must complete FICA verification (ID, RICA, proof of residence)
+- Members must sign this constitution digitally to confirm understanding and agreement
+
+## 3. CONTRIBUTIONS
+- Monthly contribution: R300 per member
+- Due date: 25th of each month
+- Payment method: EFT to designated FNB account
+
+## 4. COLLECTIVE POT
+- All contributions go into a single collective pot
+- Returns are distributed proportionally based on total contributions
+- Minimum balance of R50,000 required before first investment
+
+## 5. INVESTMENT DECISIONS
+- All investments require 60% member approval via voting
+- AI Advisor provides recommendations based on current SARB repo rate (8.25% in 2026)
+- No single investment can exceed 40% of total pot
+
+## 6. GOVERNANCE
+- Democratic voting on all major decisions
+- Transparency: All transactions visible to all members
+
+## 7. RISK AND LIABILITY
+- Investments carry risk - no guaranteed returns
+- Members understand they may lose capital
+
+Date: {{date}}
+Version: 1.0
+"""
+
+
+# ============================================================
 # INVESTMENT OPPORTUNITIES
 # ============================================================
 
@@ -483,6 +592,77 @@ def show_dashboard():
     full_name = f"{user['first_name']} {user['surname']}"
     is_admin = user['is_admin'] == 1
     
+    # ========== SIDEBAR - CONSTITUTION &amp; PROFILE ==========
+    with st.sidebar:
+        st.markdown(f"""
+        <div style="text-align: center; padding: 20px 0;">
+            <div style="font-size: 24px; font-weight: 900; 
+                        background: linear-gradient(135deg, #00b894, #00cec9);
+                        -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                🇿🇦 KHULA
+            </div>
+            <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 5px;">
+                {full_name}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚪 Logout", use_container_width=True, key="sidebar_logout"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Constitution Section
+        st.markdown("### 📜 Digital Constitution")
+        
+        if user['constitution_signed'] == 0:
+            st.warning("⚠️ Sign to participate in voting")
+            
+            with st.expander("📖 Read Constitution", expanded=False):
+                constitution_html = CONSTITUTION_TEXT.replace('\n', '<br>').format(
+                    date=datetime.now().strftime('%d %B %Y')
+                )
+                st.markdown(f'<div class="constitution-box">{constitution_html}</div>', 
+                           unsafe_allow_html=True)
+            
+            st.markdown("### ✍️ Digital Signature")
+            st.caption("FICA-compliant signature required")
+            agree = st.checkbox("I have read and agree to the constitution", key="const_agree")
+            signature_name = st.text_input("Enter your full name", placeholder=full_name, key="const_name")
+            
+            if st.button("📝 Sign Constitution", use_container_width=True, disabled=not agree or not signature_name):
+                if signature_name.strip().lower() == full_name.lower():
+                    timestamp = save_constitution_signature(user['user_id'], signature_name)
+                    st.success(f"✅ Constitution signed at {timestamp}")
+                    st.balloons()
+                    st.rerun()
+                else:
+                    st.error("❌ Name must match your registered name")
+        else:
+            st.success("✅ Constitution Signed")
+            st.caption(f"Signed: {user['constitution_signed_date']}")
+            
+            with st.expander("📖 View Constitution"):
+                constitution_html = CONSTITUTION_TEXT.replace('\n', '<br>').format(
+                    date=datetime.now().strftime('%d %B %Y')
+                )
+                st.markdown(f'<div class="constitution-box">{constitution_html}</div>', 
+                           unsafe_allow_html=True)
+        
+        # Market Context in Sidebar
+        st.markdown("---")
+        st.markdown("### 📊 Market Context (2026)")
+        st.markdown("""
+        <div style="font-size: 13px; color: rgba(255,255,255,0.7);">
+            <strong>SARB Repo Rate:</strong> 8.25%<br>
+            <strong>Prime Rate:</strong> 11.75%<br>
+            <strong>Inflation:</strong> 5.2%<br>
+            <strong>Trend:</strong> Stable
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Top Bar
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -570,44 +750,46 @@ def show_dashboard():
     
     # ========== TAB 1: DASHBOARD ==========
     with tab1:
-        st.markdown('<div class="section-header">📈 Collective Pot Growth</div>', unsafe_allow_html=True)
-        
-        if monthly_totals:
-            df = pd.DataFrame(monthly_totals)
-            month_labels = []
-            for _, row in df.iterrows():
-                try:
-                    dt = datetime(int(row['year']), int(row['month']), 1)
-                    month_labels.append(dt.strftime('%b %Y'))
-                except:
-                    month_labels.append(f"{row['month']}/{row['year']}")
-            df['label'] = month_labels
-            df['cumulative'] = df['total'].cumsum()
+        # Use container for mobile-friendly vertical stacking
+        with st.container():
+            st.markdown('<div class="section-header">📈 Collective Pot Growth</div>', unsafe_allow_html=True)
             
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df['label'], y=df['cumulative'],
-                fill='tozeroy', fillcolor='rgba(0, 184, 148, 0.15)',
-                line=dict(color='#00b894', width=3),
-                name='Total Balance',
-                hovertemplate='<b>%{x}</b><br>Balance: R%{y:,.0f}<extra></extra>'
-            ))
-            fig.add_trace(go.Bar(
-                x=df['label'], y=df['total'],
-                name='Monthly Deposits',
-                marker_color='rgba(9, 132, 227, 0.6)',
-                hovertemplate='<b>%{x}</b><br>Deposits: R%{y:,.0f}<extra></extra>'
-            ))
-            fig.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
-                height=400, margin=dict(l=20, r=20, t=20, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickprefix='R', tickformat=',.'),
-                hovermode='x unified'
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if monthly_totals:
+                df = pd.DataFrame(monthly_totals)
+                month_labels = []
+                for _, row in df.iterrows():
+                    try:
+                        dt = datetime(int(row['year']), int(row['month']), 1)
+                        month_labels.append(dt.strftime('%b %Y'))
+                    except:
+                        month_labels.append(f"{row['month']}/{row['year']}")
+                df['label'] = month_labels
+                df['cumulative'] = df['total'].cumsum()
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=df['label'], y=df['cumulative'],
+                    fill='tozeroy', fillcolor='rgba(0, 184, 148, 0.15)',
+                    line=dict(color='#00b894', width=3),
+                    name='Total Balance',
+                    hovertemplate='<b>%{x}</b><br>Balance: R%{y:,.0f}<extra></extra>'
+                ))
+                fig.add_trace(go.Bar(
+                    x=df['label'], y=df['total'],
+                    name='Monthly Deposits',
+                    marker_color='rgba(9, 132, 227, 0.6)',
+                    hovertemplate='<b>%{x}</b><br>Deposits: R%{y:,.0f}<extra></extra>'
+                ))
+                fig.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
+                    height=400, margin=dict(l=20, r=20, t=20, b=20),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickprefix='R', tickformat=',.'),
+                    hovermode='x unified'
+                )
+                st.plotly_chart(fig, use_container_width=True)
         
         # Target Progress
         yearly_target = total_members * 300 * 12
@@ -623,25 +805,26 @@ def show_dashboard():
         </div>
         """, unsafe_allow_html=True)
         
-        # Members per month chart
-        if monthly_totals:
-            st.markdown('<div class="section-header">👥 Members Paying Each Month</div>', unsafe_allow_html=True)
-            fig2 = go.Figure()
-            fig2.add_trace(go.Bar(
-                x=df['label'], y=df['members_paid'],
-                marker_color=['#00b894' if mp >= total_members * 0.8 else '#fdcb6e' if mp >= total_members * 0.5 else '#e74c3c' for mp in df['members_paid']],
-                hovertemplate='<b>%{x}</b><br>Members: %{y}<extra></extra>'
-            ))
-            fig2.add_hline(y=total_members, line_dash="dash", line_color="rgba(255,255,255,0.3)",
-                          annotation_text=f"Target: {total_members}", annotation_font_color="rgba(255,255,255,0.5)")
-            fig2.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
-                height=300, margin=dict(l=20, r=20, t=20, b=20),
-                xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
-                yaxis=dict(gridcolor='rgba(255,255,255,0.05)', title='Members')
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+        # Members per month chart - wrapped in container for mobile
+        with st.container():
+            if monthly_totals:
+                st.markdown('<div class="section-header">👥 Members Paying Each Month</div>', unsafe_allow_html=True)
+                fig2 = go.Figure()
+                fig2.add_trace(go.Bar(
+                    x=df['label'], y=df['members_paid'],
+                    marker_color=['#00b894' if mp >= total_members * 0.8 else '#fdcb6e' if mp >= total_members * 0.5 else '#e74c3c' for mp in df['members_paid']],
+                    hovertemplate='<b>%{x}</b><br>Members: %{y}<extra></extra>'
+                ))
+                fig2.add_hline(y=total_members, line_dash="dash", line_color="rgba(255,255,255,0.3)",
+                              annotation_text=f"Target: {total_members}", annotation_font_color="rgba(255,255,255,0.5)")
+                fig2.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
+                    height=300, margin=dict(l=20, r=20, t=20, b=20),
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.05)', title='Members')
+                )
+                st.plotly_chart(fig2, use_container_width=True)
         
         # Personal summary for non-admin
         if not is_admin:
@@ -799,7 +982,17 @@ def show_dashboard():
     
     # ========== TAB 4: INVESTMENTS ==========
     with tab4:
-        st.markdown(f'<div class="section-header">💡 What Can We Do With R{total_balance:,.0f}?</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-header">💡 AI Investment Advisor</div>', unsafe_allow_html=True)
+        
+        # AI Market Context
+        st.markdown("""
+        <div style="background: rgba(9, 132, 227, 0.1); border-left: 4px solid #0984e3; border-radius: 8px; padding: 15px; margin: 10px 0;">
+            <strong>🤖 AI Market Analysis (2026):</strong><br>
+            With SARB repo rate at <strong>8.25%</strong> and prime at <strong>11.75%</strong>, we're in a high-rate environment. 
+            This makes fixed-income investments like RSA Retail Bonds (8.25% guaranteed) very attractive. 
+            Lock in these rates before they drop as inflation moderates to 5.2%.
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #1e1e30, #2a2a40); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(0,184,148,0.2);">
@@ -972,6 +1165,46 @@ def show_dashboard():
                 total_possible = total_members * months_active * 300
                 overall_rate = (total_balance / total_possible * 100) if total_possible > 0 else 0
                 st.metric("Overall Collection Rate", f"{overall_rate:.1f}%")
+            
+            # FICA Signature Log
+            st.markdown("---")
+            st.markdown("### 📜 Member_Signatures (FICA Compliance Log)")
+            st.caption("Records of all members who have signed the digital constitution")
+            
+            signature_data = get_member_signatures()
+            if signature_data:
+                sig_df = pd.DataFrame([{
+                    'Member Name': s['full_name'],
+                    'ID Number': s['id_number'],
+                    'Signed Date/Time': s['constitution_signed_date'] if s['constitution_signed'] else 'Not Signed',
+                    'Status': '✅ Signed' if s['constitution_signed'] else '❌ Pending'
+                } for s in signature_data])
+                
+                st.dataframe(sig_df, use_container_width=True, hide_index=True)
+                
+                # Summary metrics
+                signed_count = sum(1 for s in signature_data if s['constitution_signed'])
+                sig_col1, sig_col2, sig_col3 = st.columns(3)
+                with sig_col1:
+                    st.metric("Total Signed", f"{signed_count}/{len(signature_data)}")
+                with sig_col2:
+                    compliance_rate = (signed_count / len(signature_data) * 100) if len(signature_data) > 0 else 0
+                    st.metric("Compliance Rate", f"{compliance_rate:.0f}%")
+                with sig_col3:
+                    pending = len(signature_data) - signed_count
+                    st.metric("Pending Signatures", pending)
+                
+                # Export signatures
+                if st.button("📥 Download FICA Signature Log (CSV)"):
+                    csv_data = sig_df.to_csv(index=False)
+                    st.download_button(
+                        label="💾 Save FICA Log CSV",
+                        data=csv_data,
+                        file_name=f"fica_signatures_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+            else:
+                st.info("No signature data available")
 
 
 # ============================================================

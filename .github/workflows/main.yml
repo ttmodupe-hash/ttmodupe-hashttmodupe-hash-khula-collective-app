@@ -1,0 +1,121 @@
+name: Khula Collective Automation
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Daily sync at 06:00 UTC (08:00 SAST)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Manual trigger option
+
+permissions:
+  contents: read
+
+jobs:
+  streamlit-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🧪 Streamlit Smoke Test
+        uses: streamlit/streamlit-app-action@v0.0.3
+        with:
+          app-path: app.py
+
+      - name: ✅ Run Unit Tests
+        run: |
+          if [ -f tests/test_app.py ]; then
+            python -m pytest tests/ -v
+          else
+            echo "No tests found, skipping..."
+          fi
+
+  # Daily FNB Sync Job (8 AM SAST)
+  fnb-sync:
+    needs: streamlit-ci
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🔄 Sync FNB Transactions
+        run: python scripts/sync_fnb.py
+        env:
+          STITCH_CLIENT_ID: ${{ secrets.STITCH_CLIENT_ID }}
+          STITCH_CLIENT_SECRET: ${{ secrets.STITCH_CLIENT_SECRET }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+  # Monthly Reset Job (1st of every month at 00:01 SAST)
+  monthly-reset:
+    needs: streamlit-ci
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🔄 Monthly Reset & Archive
+        run: python scripts/monthly_reset.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+  # Weekly Market Data Update (Mondays at 06:00 SAST)
+  market-update:
+    needs: streamlit-ci
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 📊 Update Market Rates
+        run: python scripts/update_market_data.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

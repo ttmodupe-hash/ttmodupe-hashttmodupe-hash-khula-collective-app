@@ -103,6 +103,12 @@ st.markdown("""
         touch-action: manipulation !important;
     }
     
+    /* Voted button style */
+    .stButton > button[disabled] {
+        background: linear-gradient(135deg, #636e72, #2d3436) !important;
+        opacity: 0.6 !important;
+    }
+    
     /* AI reasoning box */
     .ai-reason {
         background: rgba(9, 132, 227, 0.1);
@@ -128,6 +134,30 @@ st.markdown("""
         font-size: 18px;
         font-weight: 700;
         margin-bottom: 8px;
+    }
+    
+    /* Vote badge */
+    .vote-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #00b894, #00cec9);
+        color: white;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 14px;
+        margin: 5px 0;
+    }
+    
+    /* Already voted badge */
+    .voted-badge {
+        display: inline-block;
+        background: rgba(100, 100, 100, 0.3);
+        color: rgba(255,255,255,0.6);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 13px;
+        margin: 5px 0;
     }
     
     /* Section headers */
@@ -202,6 +232,24 @@ def get_db():
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
+
+def initialize_votes_table():
+    """Create Votes table if it doesn't exist"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Votes (
+            vote_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            suggestion_id INTEGER NOT NULL,
+            voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES Users(user_id),
+            FOREIGN KEY (suggestion_id) REFERENCES Suggestions(suggestion_id),
+            UNIQUE(user_id, suggestion_id)
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -278,54 +326,79 @@ def save_constitution_signature(user_id, full_name):
     conn.close()
     return timestamp
 
-def get_investment_votes():
-    """Get all investment suggestions with vote counts"""
+def get_votes():
+    """Get all investment suggestions with vote counts and details"""
     conn = get_db()
     cursor = conn.cursor()
     
-    # Check if Suggestions table exists and has votes column
+    # Ensure votes column exists in Suggestions
     cursor.execute("PRAGMA table_info(Suggestions)")
     columns = [col[1] for col in cursor.fetchall()]
     
     if 'votes' not in columns:
-        # Add votes column if it doesn't exist
         try:
             cursor.execute("ALTER TABLE Suggestions ADD COLUMN votes INTEGER DEFAULT 0")
             conn.commit()
         except:
             pass
     
+    # Get suggestions with vote counts from Votes table
     cursor.execute("""
-        SELECT suggestion_id, suggestion_text, COALESCE(votes, 0) as votes, created_at
-        FROM Suggestions
-        ORDER BY votes DESC, created_at DESC
+        SELECT 
+            s.suggestion_id,
+            s.suggestion_text,
+            s.created_at,
+            COUNT(v.vote_id) as vote_count
+        FROM Suggestions s
+        LEFT JOIN Votes v ON s.suggestion_id = v.suggestion_id
+        GROUP BY s.suggestion_id
+        ORDER BY vote_count DESC, s.created_at DESC
     """)
     data = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return data
 
-def vote_for_suggestion(suggestion_id):
-    """Increment vote count for a suggestion"""
+def user_has_voted(user_id, suggestion_id):
+    """Check if user has already voted for this suggestion"""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        UPDATE Suggestions 
-        SET votes = COALESCE(votes, 0) + 1
-        WHERE suggestion_id = ?
-    """, (suggestion_id,))
-    conn.commit()
+        SELECT COUNT(*) as count FROM Votes 
+        WHERE user_id = ? AND suggestion_id = ?
+    """, (user_id, suggestion_id))
+    result = cursor.fetchone()
     conn.close()
+    return result['count'] > 0
+
+def cast_vote(user_id, suggestion_id):
+    """Cast a vote for a suggestion (one vote per user per suggestion)"""
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO Votes (user_id, suggestion_id, voted_at)
+            VALUES (?, ?, ?)
+        """, (user_id, suggestion_id, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        conn.commit()
+        success = True
+    except sqlite3.IntegrityError:
+        # User already voted
+        success = False
+    conn.close()
+    return success
 
 def add_investment_suggestion(text, user_id):
     """Add a new investment suggestion"""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO Suggestions (user_id, suggestion_text, votes, created_at)
-        VALUES (?, ?, 0, ?)
+        INSERT INTO Suggestions (user_id, suggestion_text, created_at)
+        VALUES (?, ?, ?)
     """, (user_id, text, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     conn.commit()
+    suggestion_id = cursor.lastrowid
     conn.close()
+    return suggestion_id
 
 
 # ============================================================
@@ -590,6 +663,9 @@ def show_login():
 # ============================================================
 
 def show_dashboard():
+    # Initialize votes table
+    initialize_votes_table()
+    
     user = st.session_state['user']
     full_name = f"{user['first_name']} {user['surname']}"
     is_admin = user['is_admin'] == 1
@@ -748,9 +824,9 @@ def show_dashboard():
         </div>
         """, unsafe_allow_html=True)
     
-    # TAB 2: MEMBER VOICE (VOTING)
+    # TAB 2: MEMBER VOICE (LIVE VOTING DASHBOARD)
     with tabs[1]:
-        st.markdown('<div class="section-header">🗳️ Vote on Investments</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">🗳️ Live Voting Dashboard</div>', unsafe_allow_html=True)
         
         if user['constitution_signed'] == 0:
             st.warning("⚠️ Sign the constitution in sidebar to vote")
@@ -769,14 +845,36 @@ def show_dashboard():
             """, unsafe_allow_html=True)
             
             st.markdown("### 🤖 AI Recommended Investments")
-            st.caption("Vote for your preferred option. Requires 60% approval.")
+            st.caption("Vote for your preferred option. Each member gets ONE vote per proposal. Requires 60% approval.")
             
-            existing_votes = get_investment_votes()
-            vote_map = {v['suggestion_text']: v for v in existing_votes}
+            # Get current votes
+            all_votes = get_votes()
+            vote_map = {v['suggestion_text']: v for v in all_votes}
             
+            # Add AI recommendations to database if they don't exist
+            for rec in recommendations:
+                if rec['name'] not in vote_map:
+                    suggestion_id = add_investment_suggestion(rec['name'], 1)  # Admin user_id = 1
+                    vote_map[rec['name']] = {
+                        'suggestion_id': suggestion_id,
+                        'suggestion_text': rec['name'],
+                        'vote_count': 0
+                    }
+            
+            # Refresh votes after adding
+            all_votes = get_votes()
+            vote_map = {v['suggestion_text']: v for v in all_votes}
+            
+            # Display each recommendation with voting
             for i, rec in enumerate(recommendations):
-                existing = vote_map.get(rec['name'])
-                current_votes = existing['votes'] if existing else 0
+                vote_data = vote_map.get(rec['name'])
+                if not vote_data:
+                    continue
+                
+                suggestion_id = vote_data['suggestion_id']
+                current_votes = vote_data['vote_count']
+                has_voted = user_has_voted(user['user_id'], suggestion_id)
+                vote_pct = (current_votes / total_members * 100) if total_members > 0 else 0
                 
                 with st.container():
                     st.markdown(f"""
@@ -806,50 +904,78 @@ def show_dashboard():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    col1, col2 = st.columns([3, 1])
+                    col1, col2, col3 = st.columns([2, 1, 1])
                     with col1:
-                        if st.button(f"👍 Vote ({current_votes} votes)", key=f"vote_{i}", use_container_width=True):
-                            if existing:
-                                vote_for_suggestion(existing['suggestion_id'])
-                            else:
-                                add_investment_suggestion(rec['name'], user['user_id'])
-                            st.success("✅ Vote recorded!")
-                            st.rerun()
+                        if has_voted:
+                            st.markdown(f'<div class="voted-badge">✅ You voted for this</div>', unsafe_allow_html=True)
+                        else:
+                            if st.button(f"👍 Vote for this", key=f"vote_{suggestion_id}", use_container_width=True):
+                                if cast_vote(user['user_id'], suggestion_id):
+                                    st.success("✅ Vote recorded!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ You already voted")
                     with col2:
-                        vote_pct = (current_votes / total_members * 100) if total_members > 0 else 0
-                        st.metric("", f"{vote_pct:.0f}%")
+                        st.markdown(f'<div class="vote-badge">{current_votes} votes</div>', unsafe_allow_html=True)
+                    with col3:
+                        st.metric("Approval", f"{vote_pct:.0f}%")
                     
                     st.markdown("---")
             
-            # Vote chart
-            if existing_votes:
-                st.markdown('<div class="section-header">📊 Voting Results</div>', unsafe_allow_html=True)
+            # Live Voting Results Chart
+            if all_votes:
+                st.markdown('<div class="section-header">📊 Live Voting Results</div>', unsafe_allow_html=True)
                 
+                # Prepare data for chart
                 vote_df = pd.DataFrame([{
-                    'Investment': v['suggestion_text'][:30] + '...' if len(v['suggestion_text']) > 30 else v['suggestion_text'],
-                    'Votes': v['votes'],
-                    'Percentage': (v['votes'] / total_members * 100) if total_members > 0 else 0
-                } for v in existing_votes[:5]])
+                    'Investment': v['suggestion_text'][:35] + '...' if len(v['suggestion_text']) > 35 else v['suggestion_text'],
+                    'Votes': v['vote_count'],
+                    'Percentage': (v['vote_count'] / total_members * 100) if total_members > 0 else 0
+                } for v in all_votes[:8]])  # Top 8 options
                 
-                fig2 = px.bar(vote_df, x='Votes', y='Investment', orientation='h',
-                             color='Percentage', color_continuous_scale='Tealgrn',
-                             text='Votes')
-                fig2.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='rgba(255,255,255,0.7)'),
-                    height=300, margin=dict(l=10, r=10, t=10, b=10),
-                    showlegend=False
+                # Create horizontal bar chart
+                fig2 = px.bar(
+                    vote_df, 
+                    x='Votes', 
+                    y='Investment', 
+                    orientation='h',
+                    color='Percentage',
+                    color_continuous_scale='Tealgrn',
+                    text='Votes',
+                    labels={'Votes': 'Total Votes', 'Investment': ''}
                 )
-                fig2.update_traces(textposition='outside')
+                
+                fig2.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
+                    height=400,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    showlegend=False,
+                    xaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
+                    yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
+                )
+                fig2.update_traces(textposition='outside', textfont_size=14)
+                
                 st.plotly_chart(fig2, use_container_width=True)
                 
-                max_votes = max(v['votes'] for v in existing_votes)
+                # Approval status
+                max_votes = max(v['vote_count'] for v in all_votes)
                 approval_pct = (max_votes / total_members * 100) if total_members > 0 else 0
                 
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Votes Cast", sum(v['vote_count'] for v in all_votes))
+                with col2:
+                    st.metric("Leading Option", f"{approval_pct:.0f}%")
+                with col3:
+                    threshold_met = approval_pct >= 60
+                    st.metric("60% Threshold", "✅ MET" if threshold_met else "❌ Not Yet")
+                
                 if approval_pct >= 60:
-                    st.success(f"🎉 Leading option: {approval_pct:.0f}% - READY TO PROCEED!")
+                    st.success(f"🎉 Leading option has {approval_pct:.0f}% approval - READY TO PROCEED!")
                 else:
-                    st.info(f"📊 Leading option: {approval_pct:.0f}% - Need 60% to proceed")
+                    st.info(f"📊 Leading option has {approval_pct:.0f}% approval - Need 60% to proceed ({int(total_members * 0.6)} votes)")
     
     # TAB 3: AI ADVISOR
     with tabs[2]:

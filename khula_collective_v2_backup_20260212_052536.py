@@ -10,9 +10,6 @@ import os
 # KHULA COLLECTIVE - THE APP YOUR MEMBERS DESERVE
 # ============================================================
 
-# BETA MODE - Set to True for testing
-BETA_MODE = True
-
 st.set_page_config(
     page_title="Khula Collective 💰",
     page_icon="💰",
@@ -411,24 +408,6 @@ def save_constitution_signature(user_id, full_name):
     conn.close()
     return timestamp
 
-def get_member_signatures():
-    """Get all member signatures for FICA compliance log"""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT 
-            first_name || ' ' || surname as full_name,
-            id_number,
-            constitution_signed_date,
-            constitution_signed
-        FROM Users
-        WHERE is_admin = 0
-        ORDER BY constitution_signed_date DESC
-    """)
-    data = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return data
-
 CONSTITUTION_TEXT = """
 # KHULA COLLECTIVE CONSTITUTION
 
@@ -756,43 +735,43 @@ def show_dashboard():
         # Use container for mobile-friendly vertical stacking
         with st.container():
             st.markdown('<div class="section-header">📈 Collective Pot Growth</div>', unsafe_allow_html=True)
+        
+        if monthly_totals:
+            df = pd.DataFrame(monthly_totals)
+            month_labels = []
+            for _, row in df.iterrows():
+                try:
+                    dt = datetime(int(row['year']), int(row['month']), 1)
+                    month_labels.append(dt.strftime('%b %Y'))
+                except:
+                    month_labels.append(f"{row['month']}/{row['year']}")
+            df['label'] = month_labels
+            df['cumulative'] = df['total'].cumsum()
             
-            if monthly_totals:
-                df = pd.DataFrame(monthly_totals)
-                month_labels = []
-                for _, row in df.iterrows():
-                    try:
-                        dt = datetime(int(row['year']), int(row['month']), 1)
-                        month_labels.append(dt.strftime('%b %Y'))
-                    except:
-                        month_labels.append(f"{row['month']}/{row['year']}")
-                df['label'] = month_labels
-                df['cumulative'] = df['total'].cumsum()
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=df['label'], y=df['cumulative'],
-                    fill='tozeroy', fillcolor='rgba(0, 184, 148, 0.15)',
-                    line=dict(color='#00b894', width=3),
-                    name='Total Balance',
-                    hovertemplate='<b>%{x}</b><br>Balance: R%{y:,.0f}<extra></extra>'
-                ))
-                fig.add_trace(go.Bar(
-                    x=df['label'], y=df['total'],
-                    name='Monthly Deposits',
-                    marker_color='rgba(9, 132, 227, 0.6)',
-                    hovertemplate='<b>%{x}</b><br>Deposits: R%{y:,.0f}<extra></extra>'
-                ))
-                fig.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
-                    height=400, margin=dict(l=20, r=20, t=20, b=20),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickprefix='R', tickformat=',.'),
-                    hovermode='x unified'
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df['label'], y=df['cumulative'],
+                fill='tozeroy', fillcolor='rgba(0, 184, 148, 0.15)',
+                line=dict(color='#00b894', width=3),
+                name='Total Balance',
+                hovertemplate='<b>%{x}</b><br>Balance: R%{y:,.0f}<extra></extra>'
+            ))
+            fig.add_trace(go.Bar(
+                x=df['label'], y=df['total'],
+                name='Monthly Deposits',
+                marker_color='rgba(9, 132, 227, 0.6)',
+                hovertemplate='<b>%{x}</b><br>Deposits: R%{y:,.0f}<extra></extra>'
+            ))
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
+                height=400, margin=dict(l=20, r=20, t=20, b=20),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickprefix='R', tickformat=',.'),
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True)
         
         # Target Progress
         yearly_target = total_members * 300 * 12
@@ -808,26 +787,25 @@ def show_dashboard():
         </div>
         """, unsafe_allow_html=True)
         
-        # Members per month chart - wrapped in container for mobile
-        with st.container():
-            if monthly_totals:
-                st.markdown('<div class="section-header">👥 Members Paying Each Month</div>', unsafe_allow_html=True)
-                fig2 = go.Figure()
-                fig2.add_trace(go.Bar(
-                    x=df['label'], y=df['members_paid'],
-                    marker_color=['#00b894' if mp >= total_members * 0.8 else '#fdcb6e' if mp >= total_members * 0.5 else '#e74c3c' for mp in df['members_paid']],
-                    hovertemplate='<b>%{x}</b><br>Members: %{y}<extra></extra>'
-                ))
-                fig2.add_hline(y=total_members, line_dash="dash", line_color="rgba(255,255,255,0.3)",
-                              annotation_text=f"Target: {total_members}", annotation_font_color="rgba(255,255,255,0.5)")
-                fig2.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
-                    height=300, margin=dict(l=20, r=20, t=20, b=20),
-                    xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
-                    yaxis=dict(gridcolor='rgba(255,255,255,0.05)', title='Members')
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+        # Members per month chart
+        if monthly_totals:
+            st.markdown('<div class="section-header">👥 Members Paying Each Month</div>', unsafe_allow_html=True)
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(
+                x=df['label'], y=df['members_paid'],
+                marker_color=['#00b894' if mp >= total_members * 0.8 else '#fdcb6e' if mp >= total_members * 0.5 else '#e74c3c' for mp in df['members_paid']],
+                hovertemplate='<b>%{x}</b><br>Members: %{y}<extra></extra>'
+            ))
+            fig2.add_hline(y=total_members, line_dash="dash", line_color="rgba(255,255,255,0.3)",
+                          annotation_text=f"Target: {total_members}", annotation_font_color="rgba(255,255,255,0.5)")
+            fig2.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='rgba(255,255,255,0.7)', family='Inter'),
+                height=300, margin=dict(l=20, r=20, t=20, b=20),
+                xaxis=dict(gridcolor='rgba(255,255,255,0.05)', tickangle=-45),
+                yaxis=dict(gridcolor='rgba(255,255,255,0.05)', title='Members')
+            )
+            st.plotly_chart(fig2, use_container_width=True)
         
         # Personal summary for non-admin
         if not is_admin:
@@ -1168,46 +1146,6 @@ def show_dashboard():
                 total_possible = total_members * months_active * 300
                 overall_rate = (total_balance / total_possible * 100) if total_possible > 0 else 0
                 st.metric("Overall Collection Rate", f"{overall_rate:.1f}%")
-            
-            # FICA Signature Log
-            st.markdown("---")
-            st.markdown("### 📜 Member_Signatures (FICA Compliance Log)")
-            st.caption("Records of all members who have signed the digital constitution")
-            
-            signature_data = get_member_signatures()
-            if signature_data:
-                sig_df = pd.DataFrame([{
-                    'Member Name': s['full_name'],
-                    'ID Number': s['id_number'],
-                    'Signed Date/Time': s['constitution_signed_date'] if s['constitution_signed'] else 'Not Signed',
-                    'Status': '✅ Signed' if s['constitution_signed'] else '❌ Pending'
-                } for s in signature_data])
-                
-                st.dataframe(sig_df, use_container_width=True, hide_index=True)
-                
-                # Summary metrics
-                signed_count = sum(1 for s in signature_data if s['constitution_signed'])
-                sig_col1, sig_col2, sig_col3 = st.columns(3)
-                with sig_col1:
-                    st.metric("Total Signed", f"{signed_count}/{len(signature_data)}")
-                with sig_col2:
-                    compliance_rate = (signed_count / len(signature_data) * 100) if len(signature_data) > 0 else 0
-                    st.metric("Compliance Rate", f"{compliance_rate:.0f}%")
-                with sig_col3:
-                    pending = len(signature_data) - signed_count
-                    st.metric("Pending Signatures", pending)
-                
-                # Export signatures
-                if st.button("📥 Download FICA Signature Log (CSV)"):
-                    csv_data = sig_df.to_csv(index=False)
-                    st.download_button(
-                        label="💾 Save FICA Log CSV",
-                        data=csv_data,
-                        file_name=f"fica_signatures_{datetime.now().strftime('%Y%m%d')}.csv",
-                        mime="text/csv"
-                    )
-            else:
-                st.info("No signature data available")
 
 
 # ============================================================

@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment variables
+.env
+*.key
+encryption.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Database
+*.db-journal
+fnb_savings.db
+
+# Temporary files
+outputs/
+summarized_conversations/
+.agent_hooks/
+todo.md
+
+# Old versions (keep only final versions)
+app.py
+app_multiuser.py
+database.py
+init_database.py
+stitch_api.py
+data_processor.py
+analytics.py
+khula_app.py
+auth_config.yaml
+requirements.txt

@@ -10,6 +10,9 @@ import os
 # KHULA COLLECTIVE - THE APP YOUR MEMBERS DESERVE
 # ============================================================
 
+# BETA MODE - Set to True for testing
+BETA_MODE = True
+
 st.set_page_config(
     page_title="Khula Collective 💰",
     page_icon="💰",
